@@ -1,0 +1,63 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git zip unzip openjdk-17-jdk autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev libssl-dev ant
+        pip install --upgrade pip
+        pip install buildozer==1.5.0 cython==3.0.10
+    
+    - name: Force correct build tools version by patching p4a
+      run: |
+        python -c "
+import site
+import os
+
+# Find python-for-android installation path
+for path in site.getsitepackages():
+    p4a_path = os.path.join(path, 'pythonforandroid')
+    if os.path.exists(p4a_path):
+        print(f'Found p4a at: {p4a_path}')
+        
+        # Patch the build tools version in p4a
+        build_context_path = os.path.join(p4a_path, 'build.py')
+        if os.path.exists(build_context_path):
+            with open(build_context_path, 'r') as f:
+                content = f.read()
+            
+            # Replace 37.0.0 with 33.0.2
+            content = content.replace('37.0.0', '33.0.2')
+            
+            with open(build_context_path, 'w') as f:
+                f.write(content)
+            print('Patched build.py successfully')
+        break
+"
+    
+    - name: Build APK
+      run: |
+        buildozer android debug
+    
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: roguelike-game-apk
+        path: bin/*.apk
